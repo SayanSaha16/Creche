@@ -7,7 +7,7 @@ import static com.marsad.catchy.utils.Constants.PREF_DIRECTORY;
 import static com.marsad.catchy.utils.Constants.PREF_NAME;
 import static com.marsad.catchy.utils.Constants.PREF_STORED;
 import static com.marsad.catchy.utils.Constants.PREF_URL;
-
+import android.provider.MediaStore;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -61,8 +61,6 @@ import com.marsad.catchy.R;
 import com.marsad.catchy.chat.ChatActivity;
 import com.marsad.catchy.model.PostImageModel;
 import com.marsad.stylishdialogs.StylishAlertDialog;
-import com.theartofdev.edmodo.cropper.CropImage;
-import com.theartofdev.edmodo.cropper.CropImageView;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -76,7 +74,7 @@ import java.util.Map;
 import de.hdodenhof.circleimageview.CircleImageView;
 
 public class Profile extends Fragment {
-
+    private static final int PICK_IMAGE_REQUEST = 1;
     boolean isMyProfile = true;
     String userUID;
     FirestoreRecyclerAdapter<PostImageModel, PostImageHolder> adapter;
@@ -257,10 +255,11 @@ public class Profile extends Fragment {
 
         assert getContext() != null;
 
-        editProfileBtn.setOnClickListener(v -> CropImage.activity()
-                .setGuidelines(CropImageView.Guidelines.ON)
-                .setAspectRatio(1, 1)
-                .start(getContext(), Profile.this));
+        editProfileBtn.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            startActivityForResult(intent, PICK_IMAGE_REQUEST);
+        });
+
 
         startChatBtn.setOnClickListener(v -> {
             queryChat();
@@ -581,68 +580,47 @@ public class Profile extends Fragment {
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == CropImage.CROP_IMAGE_ACTIVITY_REQUEST_CODE && resultCode == RESULT_OK) {
-
-            CropImage.ActivityResult result = CropImage.getActivityResult(data);
-
-            if (result == null)
-                return;
-
-            Uri uri = result.getUri();
-
+        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri uri = data.getData();
             uploadImage(uri);
-
         }
-
     }
-
     private void uploadImage(Uri uri) {
-
         final StorageReference reference = FirebaseStorage.getInstance().getReference().child("Profile Images");
 
         reference.putFile(uri)
                 .addOnCompleteListener(task -> {
-
                     if (task.isSuccessful()) {
+                        reference.getDownloadUrl().addOnSuccessListener(uri1 -> {
+                            String imageURL = uri1.toString();
 
-                        reference.getDownloadUrl()
-                                .addOnSuccessListener(uri1 -> {
-                                    String imageURL = uri1.toString();
+                            UserProfileChangeRequest.Builder request = new UserProfileChangeRequest.Builder();
+                            request.setPhotoUri(uri1);
 
-                                    UserProfileChangeRequest.Builder request = new UserProfileChangeRequest.Builder();
-                                    request.setPhotoUri(uri1);
+                            user.updateProfile(request.build());
 
-                                    user.updateProfile(request.build());
+                            Map<String, Object> map = new HashMap<>();
+                            map.put("profileImage", imageURL);
 
-                                    Map<String, Object> map = new HashMap<>();
-                                    map.put("profileImage", imageURL);
-
-                                    FirebaseFirestore.getInstance().collection("Users")
-                                            .document(user.getUid())
-                                            .update(map).addOnCompleteListener(task1 -> {
-
-                                                if (task1.isSuccessful())
-                                                    Toast.makeText(getContext(),
-                                                            "Updated Successful", Toast.LENGTH_SHORT).show();
-                                                else {
-                                                    assert task1.getException() != null;
-                                                    Toast.makeText(getContext(),
-                                                            "Error: " + task1.getException().getMessage(),
-                                                            Toast.LENGTH_SHORT).show();
-                                                }
-                                            });
-
-                                });
-
+                            FirebaseFirestore.getInstance().collection("Users")
+                                    .document(user.getUid())
+                                    .update(map)
+                                    .addOnCompleteListener(task1 -> {
+                                        if (task1.isSuccessful()) {
+                                            Toast.makeText(getContext(), "Updated Successful", Toast.LENGTH_SHORT).show();
+                                            // Update profile image view if needed
+                                            profileImage.setImageURI(uri);  // Update profile image view if needed
+                                        } else {
+                                            assert task1.getException() != null;
+                                            Toast.makeText(getContext(), "Error: " + task1.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                                        }
+                                    });
+                        });
                     } else {
                         assert task.getException() != null;
-                        Toast.makeText(getContext(), "Error: " + task.getException().getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Error: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
                     }
-
                 });
-
-
     }
 
     void createNotification() {

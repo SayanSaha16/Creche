@@ -1,5 +1,9 @@
 {
   "projects": {
-    "default": "catchy-6b517"
-  }
+    "default": "catchy-c70bd",
+    "catchy": "catchy-c70bd"
+  },
+  "targets": {},
+  "etags": {},
+  "dataconnectEmulatorConfig": {}
 }
